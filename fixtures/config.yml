@@ -1,5 +1,5 @@
 ---
-path: /tmp/index
+path: /tmp/searcher_index
 schema:
   - name: id
     type: u64

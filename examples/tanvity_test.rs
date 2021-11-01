@@ -29,7 +29,7 @@ fn main() -> tantivy::Result<()> {
         .reload_policy(ReloadPolicy::OnCommit)
         .try_into()?;
 
-    let content = include_str!("../fixtures/wiki_00");
+    let content = include_str!("../fixtures/wiki_00.xml");
     add_or_update_index(&index, content);
 
     reader.reload().unwrap();
