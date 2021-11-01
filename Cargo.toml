@@ -2,8 +2,16 @@
 name = "xunmi"
 version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT"
+documentation = "https://docs.rs/xunmi"
+repository = "https://github.com/tyrchen/xunmi"
+homepage = "https://github.com/tyrchen/xunmi"
+description = """
+A user-friendly search library base on tanvity.
+"""
+readme = "README.md"
+keywords = ["search", "information", "retrieval", "tantivy"]
+categories = ["text-processing", "database-implementations"]
 
 [dependencies]
 cang-jie = "0.13.0"
