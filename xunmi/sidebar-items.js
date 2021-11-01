@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["InputType",""],["TextLanguage",""],["ValueType",""]],"struct":[["IndexConfig",""],["IndexUpdater",""],["Indexer",""],["InputConfig",""],["Schema","Tantivy has a very strict schema. You need to specify in advance, whether a field is indexed or not, stored or not, and RAM-based or not."]]});
