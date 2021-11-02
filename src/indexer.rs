@@ -1,14 +1,14 @@
-use std::{fs, ops::Deref, sync::Arc};
-
 use cang_jie::{CangJieTokenizer, TokenizerOption, CANG_JIE};
+use crossbeam_channel::{unbounded, Sender};
 use jieba_rs::Jieba;
+use std::{fs, ops::Deref, sync::Arc, thread};
 use tantivy::{
     collector::TopDocs, directory::MmapDirectory, query::QueryParser, schema::NamedFieldDocument,
     Index, IndexReader, ReloadPolicy, Result,
 };
-use tracing::info;
+use tracing::{info, warn};
 
-use crate::{IndexConfig, IndexUpdater, TextLanguage};
+use crate::{IndexConfig, IndexUpdater, Input, TextLanguage};
 
 #[derive(Clone)]
 pub struct Indexer {
@@ -27,45 +27,40 @@ pub struct IndexInner {
     index: Index,
     reader: IndexReader,
     config: IndexConfig,
+    updater: Sender<Input>,
 }
 
 impl Indexer {
-    fn new(index: Index, config: IndexConfig) -> Result<Self> {
-        let reader = index
-            .reader_builder()
-            .reload_policy(ReloadPolicy::OnCommit)
-            .try_into()?;
-        let inner = IndexInner {
-            index,
-            reader,
-            config,
-        };
-        Ok(Self {
-            inner: Arc::new(inner),
-        })
-    }
-
     pub fn open_or_create(config: IndexConfig) -> Result<Self> {
         let schema = config.schema.clone();
         let index = if let Some(dir) = &config.path {
             fs::create_dir_all(dir)?;
             let dir = MmapDirectory::open(dir)?;
-            Index::open_or_create(dir, schema)?
+            Index::open_or_create(dir, schema.clone())?
         } else {
-            Index::create_in_ram(schema)
+            Index::create_in_ram(schema.clone())
         };
 
         Self::set_tokenizer(&index, &config);
-        Self::new(index, config)
+
+        let mut writer = index.writer(config.writer_memory)?;
+        let (s, r) = unbounded::<Input>();
+
+        // spawn a thread to process the writer request
+        thread::spawn(move || {
+            for input in r {
+                if let Err(e) = input.process(&mut writer, &schema) {
+                    warn!("Failed to process input. Error: {:?}", e);
+                }
+            }
+        });
+
+        Self::new(index, config, s)
     }
 
-    pub fn get_updater(&self) -> Result<IndexUpdater> {
-        let writer = self.index.writer(self.config.writer_memory)?;
-        let t2s = match self.config.text_lang {
-            TextLanguage::Chinese(t2s) => t2s,
-            _ => false,
-        };
-        Ok(IndexUpdater::new(writer, self.index.schema(), t2s))
+    pub fn get_updater(&self) -> IndexUpdater {
+        let t2s = TextLanguage::Chinese(true) == self.config.text_lang;
+        IndexUpdater::new(self.updater.clone(), self.index.schema(), t2s)
     }
 
     pub fn reload(&self) -> Result<()> {
@@ -102,6 +97,22 @@ impl Indexer {
     }
 
     // private functions
+    fn new(index: Index, config: IndexConfig, updater: Sender<Input>) -> Result<Self> {
+        let reader = index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::OnCommit)
+            .try_into()?;
+        let inner = IndexInner {
+            index,
+            reader,
+            config,
+            updater,
+        };
+        Ok(Self {
+            inner: Arc::new(inner),
+        })
+    }
+
     fn set_tokenizer(index: &Index, config: &IndexConfig) {
         let tokenizer = CangJieTokenizer {
             worker: Arc::new(Jieba::empty()), // empty dictionary
