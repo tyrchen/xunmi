@@ -52,13 +52,24 @@
 <span id="52">52</span>
 <span id="53">53</span>
 <span id="54">54</span>
+<span id="55">55</span>
+<span id="56">56</span>
+<span id="57">57</span>
+<span id="58">58</span>
+<span id="59">59</span>
+<span id="60">60</span>
+<span id="61">61</span>
+<span id="62">62</span>
 </pre><pre class="rust"><code><span class="kw">mod</span> <span class="ident">config</span>;
 <span class="kw">mod</span> <span class="ident">indexer</span>;
+<span class="kw">mod</span> <span class="ident">input</span>;
 <span class="kw">mod</span> <span class="ident">updater</span>;
 
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">config</span>::{<span class="ident">IndexConfig</span>, <span class="ident">TextLanguage</span>};
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">indexer::Indexer</span>;
-<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">updater</span>::{<span class="ident">IndexUpdater</span>, <span class="ident">InputConfig</span>, <span class="ident">InputType</span>, <span class="ident">ValueType</span>};
+<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">use</span> <span class="ident">input::Input</span>;
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">input</span>::{<span class="ident">InputConfig</span>, <span class="ident">InputType</span>, <span class="ident">ValueType</span>};
+<span class="kw">pub</span> <span class="kw">use</span> <span class="ident">updater::IndexUpdater</span>;
 
 <span class="comment">// re-exports</span>
 <span class="kw">pub</span> <span class="kw">use</span> <span class="ident">tantivy::schema::Schema</span>;
@@ -68,14 +79,14 @@
     <span class="kw">use</span> <span class="ident">serde_json::json</span>;
 
     <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
-    <span class="kw">use</span> <span class="ident">std::str::FromStr</span>;
+    <span class="kw">use</span> <span class="ident">std</span>::{<span class="ident">str::FromStr</span>, <span class="ident">thread</span>, <span class="ident">time::Duration</span>};
 
     <span class="attribute">#[<span class="ident">test</span>]</span>
     <span class="kw">fn</span> <span class="ident">index_data_and_search</span>() {
         <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">config</span> <span class="op">=</span> <span class="ident">IndexConfig::from_str</span>(<span class="macro">include_str!</span>(<span class="string">&quot;../fixtures/config.yml&quot;</span>)).<span class="ident">unwrap</span>();
         <span class="ident">config</span>.<span class="ident">path</span> <span class="op">=</span> <span class="prelude-val">None</span>;
         <span class="kw">let</span> <span class="ident">indexer</span> <span class="op">=</span> <span class="ident">Indexer::open_or_create</span>(<span class="ident">config</span>).<span class="ident">unwrap</span>();
-        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">updater</span> <span class="op">=</span> <span class="ident">indexer</span>.<span class="ident">get_updater</span>().<span class="ident">unwrap</span>();
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">updater</span> <span class="op">=</span> <span class="ident">indexer</span>.<span class="ident">get_updater</span>();
 
         <span class="kw">let</span> <span class="ident">data</span> <span class="op">=</span> <span class="macro">include_str!</span>(<span class="string">&quot;../fixtures/test.yml&quot;</span>);
         <span class="kw">let</span> <span class="ident">config</span> <span class="op">=</span> <span class="ident">InputConfig::new</span>(<span class="ident">InputType::Yaml</span>, <span class="macro">vec!</span>[], <span class="macro">vec!</span>[]);
@@ -93,10 +104,15 @@
         }))
         .<span class="ident">unwrap</span>();
         <span class="ident">updater</span>.<span class="ident">add</span>(<span class="kw-2">&amp;</span><span class="ident">json_data</span>, <span class="kw-2">&amp;</span><span class="ident">config</span>).<span class="ident">unwrap</span>();
+        <span class="ident">updater</span>.<span class="ident">commit</span>().<span class="ident">unwrap</span>();
 
-        <span class="ident">indexer</span>.<span class="ident">reload</span>().<span class="ident">unwrap</span>();
+        <span class="comment">// need to wait enough time for commit to be ready</span>
+        <span class="kw">while</span> <span class="ident">indexer</span>.<span class="ident">num_docs</span>() <span class="op">=</span><span class="op">=</span> <span class="number">0</span> {
+            <span class="ident">thread::sleep</span>(<span class="ident">Duration::from_millis</span>(<span class="number">100</span>));
+        }
 
         <span class="kw">let</span> <span class="ident">result</span> <span class="op">=</span> <span class="ident">indexer</span>.<span class="ident">search</span>(<span class="string">&quot;宋元&quot;</span>, <span class="kw-2">&amp;</span>[<span class="string">&quot;title&quot;</span>, <span class="string">&quot;content&quot;</span>], <span class="number">5</span>, <span class="number">0</span>).<span class="ident">unwrap</span>();
+
         <span class="macro">assert_eq!</span>(<span class="ident">result</span>.<span class="ident">len</span>(), <span class="number">2</span>);
         <span class="kw">let</span> <span class="ident">ids</span>: <span class="ident">Vec</span><span class="op">&lt;</span><span class="kw">_</span><span class="op">&gt;</span> <span class="op">=</span> <span class="ident">result</span>
             .<span class="ident">iter</span>()
