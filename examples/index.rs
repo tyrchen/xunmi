@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{str::FromStr, thread, time::Duration};
 use xunmi::*;
 
 fn main() {
@@ -9,7 +9,7 @@ fn main() {
     let indexer = Indexer::open_or_create(config).unwrap();
 
     // then you can get the updater for adding / updating index
-    let mut updater = indexer.get_updater().unwrap();
+    let mut updater = indexer.get_updater();
 
     // data to index could comes from json / yaml / xml, as long as they're compatible with schema
     let content = include_str!("../fixtures/wiki_00.xml");
@@ -28,19 +28,30 @@ fn main() {
     // if you add, it will insert new docs; if you update, and if the doc
     // contains an "id" field, updater will first delete the term matching
     // id (so id shall be unique), then insert new docs.
-    // all data added/deleted will be committed.
+
     updater.update(content, &config).unwrap();
+
+    // commit all data added/deleted.
+    updater.commit().unwrap();
 
     // by default the indexer will be auto reloaded upon every commit,
     // but that has delays in tens of milliseconds, so for this example,
     // we shall reload immediately.
-    indexer.reload().unwrap();
+
+    // for this demo, need to wait enough time for commit to be ready
+    while indexer.num_docs() == 0 {
+        thread::sleep(Duration::from_millis(100));
+    }
 
     println!("total: {}", indexer.num_docs());
 
     // you could provide a query and fields you want to search
     let result = indexer.search("历史", &["title", "content"], 5, 0).unwrap();
     for (score, doc) in result.iter() {
-        println!("score: {}, doc: {:?}", score, doc);
+        println!(
+            "score: {}, doc: {:?}",
+            score,
+            serde_json::to_string(&doc).unwrap()
+        );
     }
 }
