@@ -35,13 +35,17 @@ fn main() {
     // if you add, it will insert new docs; if you update, and if the doc
     // contains an "id" field, updater will first delete the term matching
     // id (so id shall be unique), then insert new docs.
-    // all data added/deleted will be committed.
     updater.update(content, &config).unwrap();
 
+    // commit all data added/deleted.
+    updater.commit().unwrap();
+
     // by default the indexer will be auto reloaded upon every commit,
-    // but that has delays in tens of milliseconds, so for this example,
-    // we shall reload immediately.
-    indexer.reload().unwrap();
+    // but that has delays in hundreds of milliseconds, so for this demo,
+    // we need to wait enough time for commit to be ready
+    while indexer.num_docs() == 0 {
+        thread::sleep(Duration::from_millis(100));
+    }
 
     println!("total: {}", indexer.num_docs());
 
